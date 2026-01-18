@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Blink Morse Code Translator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- MediaPipe Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <canvas id="starfield"
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none;"></canvas>
+    <div class="scanlines"></div>
+
+    <div class="container">
+        <header>
+            <div class="score-board">
+                <span>1UP 00000</span>
+                <span>HIGH SCORE 25000</span>
+            </div>
+            <h1>BLINK<br><span class="highlight">MORSE</span></h1>
+            <p class="subtitle">BLINK TO START</p>
+        </header>
+
+        <main>
+            <div class="video-frame">
+                <div class="video-container">
+                    <video class="input_video" playsinline></video>
+                    <canvas class="output_canvas"></canvas>
+                    <div class="status-indicator" id="status-indicator">INSERT COIN</div>
+                </div>
+            </div>
+
+            <div class="output-section">
+                <div class="retro-box">
+                    <span class="label">SIGNAL</span>
+                    <div id="current-morse" class="display-box text-glow"></div>
+                </div>
+                <div class="retro-box">
+                    <span class="label">TRANSLATION</span>
+                    <div id="translated-text" class="display-box"></div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="reset-btn" class="btn pixel-btn">RESET SYSTEM</button>
+            </div>
+        </main>
+
+        <div class="guide">
+            <div class="guide-item">
+                <span class="dot">■</span> SHORT = DOT
+            </div>
+            <div class="guide-item">
+                <span class="dash">▬</span> LONG = DASH
+            </div>
+        </div>
+
+        <footer>
+            made by akshat
+        </footer>
+    </div>
+
+    <script src="stars.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
