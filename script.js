@@ -38,10 +38,7 @@ function getDistance(p1, p2) {
     return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
 }
 
-// Helper: Calculate Eye Aspect Ratio (EAR)
-// Landmarks: 
-// Left Eye: 33, 160, 158, 133, 153, 144
-// Right Eye: 362, 385, 387, 263, 373, 380
+
 function calculateEAR(landmarks, indices) {
     // Vertical distances
     const v1 = getDistance(landmarks[indices[1]], landmarks[indices[5]]);
@@ -60,8 +57,6 @@ function onResults(results) {
 
     if (results.multiFaceLandmarks) {
         for (const landmarks of results.multiFaceLandmarks) {
-            // Draw mesh (optional, maybe just eyes for cleaner look)
-            // drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
 
             // Left Eye Indices
             const leftEyeIndices = [33, 160, 158, 133, 153, 144];
