@@ -1,172 +1,194 @@
-const videoElement = document.getElementsByClassName('input_video')[0];
-const canvasElement = document.getElementsByClassName('output_canvas')[0];
-const canvasCtx = canvasElement.getContext('2d');
-const statusIndicator = document.getElementById('status-indicator');
-const currentMorseDisplay = document.getElementById('current-morse');
-const translatedTextDisplay = document.getElementById('translated-text');
-const resetBtn = document.getElementById('reset-btn');
+// grabbing stuff from the DOM — probably should cache this better, but it’s fine for now
+const videoEl = document.getElementsByClassName('input_video')[0];
+const canvasEl = document.getElementsByClassName('output_canvas')[0];
+const ctx = canvasEl.getContext('2d');
 
-// Morse Code Dictionary
-const morseCode = {
-    '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
-    '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
-    '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
-    '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
-    '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
-    '--..': 'Z', '-----': '0', '.----': '1', '..---': '2', '...--': '3',
-    '....-': '4', '.....': '5', '-....': '6', '--...': '7', '---..': '8',
-    '----.': '9'
+const statusEl = document.getElementById('status-indicator');
+const morseLiveEl = document.getElementById('current-morse');
+const outputTextEl = document.getElementById('translated-text');
+const resetButton = document.getElementById('reset-btn');
+
+// basic morse lookup table
+// I copied this from an old snippet and just kept it around
+const morseMap = {
+  '.-': 'A', '-...': 'B', '-.-.': 'C', '-..': 'D', '.': 'E',
+  '..-.': 'F', '--.': 'G', '....': 'H', '..': 'I', '.---': 'J',
+  '-.-': 'K', '.-..': 'L', '--': 'M', '-.': 'N', '---': 'O',
+  '.--.': 'P', '--.-': 'Q', '.-.': 'R', '...': 'S', '-': 'T',
+  '..-': 'U', '...-': 'V', '.--': 'W', '-..-': 'X', '-.--': 'Y',
+  '--..': 'Z',
+  '-----': '0', '.----': '1', '..---': '2', '...--': '3',
+  '....-': '4', '.....': '5', '-....': '6', '--...': '7',
+  '---..': '8', '----.': '9'
 };
 
-// Blink Detection Constants
-const EAR_THRESHOLD = 0.25; // Eye Aspect Ratio threshold for blink
-const DOT_DURATION = 200;   // Max duration for a dot (ms)
-const DASH_DURATION = 500;  // Min duration for a dash (ms)
-const CHAR_PAUSE = 1000;    // Pause to complete a character (ms)
-const WORD_PAUSE = 3000;    // Pause to add a space (ms)
+// thresholds — these needed some trial & error
+const EAR_LIMIT = 0.25;
+const DOT_TIME = 200;
+const DASH_TIME = 500; // technically unused, but keeping it for clarity
+const CHAR_GAP = 1000;
+const WORD_GAP = 3000;
 
-// State Variables
-let blinkStartTime = 0;
-let isBlinking = false;
-let currentSequence = '';
-let lastBlinkTime = 0;
-let charTimer = null;
-let wordTimer = null;
+// state-ish variables
+let blinkStartedAt = 0;
+let blinkingNow = false;
+let morseBuffer = '';
+let lastBlinkAt = 0; // might be useful later?
+let charTimeout = null;
+let wordTimeout = null;
 
-// Helper: Calculate Euclidean Distance
-function getDistance(p1, p2) {
-    return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+// distance helper
+function distance(pt1, pt2) {
+  const dx = pt1.x - pt2.x;
+  const dy = pt1.y - pt2.y;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
+// EAR calculation (eye aspect ratio)
+// I always forget the exact formula, so leaving this verbose
+function calcEAR(points, idx) {
+  const vA = distance(points[idx[1]], points[idx[5]]);
+  const vB = distance(points[idx[2]], points[idx[4]]);
+  const h = distance(points[idx[0]], points[idx[3]]);
 
-function calculateEAR(landmarks, indices) {
-    // Vertical distances
-    const v1 = getDistance(landmarks[indices[1]], landmarks[indices[5]]);
-    const v2 = getDistance(landmarks[indices[2]], landmarks[indices[4]]);
-
-    // Horizontal distance
-    const h = getDistance(landmarks[indices[0]], landmarks[indices[3]]);
-
-    return (v1 + v2) / (2.0 * h);
+  return (vA + vB) / (2 * h);
 }
 
 function onResults(results) {
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-    canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+  ctx.save();
+  ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
 
-    if (results.multiFaceLandmarks) {
-        for (const landmarks of results.multiFaceLandmarks) {
+  if (results.multiFaceLandmarks && results.multiFaceLandmarks.length) {
+    results.multiFaceLandmarks.forEach((face) => {
+      // landmark indices from MediaPipe docs
+      const leftEye = [33, 160, 158, 133, 153, 144];
+      const rightEye = [362, 385, 387, 263, 373, 380];
 
-            // Left Eye Indices
-            const leftEyeIndices = [33, 160, 158, 133, 153, 144];
-            // Right Eye Indices
-            const rightEyeIndices = [362, 385, 387, 263, 373, 380];
+      const leftEAR = calcEAR(face, leftEye);
+      const rightEAR = calcEAR(face, rightEye);
 
-            const leftEAR = calculateEAR(landmarks, leftEyeIndices);
-            const rightEAR = calculateEAR(landmarks, rightEyeIndices);
+      const avg = (leftEAR + rightEAR) / 2;
 
-            const avgEAR = (leftEAR + rightEAR) / 2;
+      handleBlink(avg);
 
-            handleBlinkLogic(avgEAR);
+      // visuals (purely cosmetic)
+      drawConnectors(ctx, face, FACEMESH_RIGHT_EYE, {
+        color: '#9068c6ff',
+        lineWidth: 2
+      });
+      drawConnectors(ctx, face, FACEMESH_LEFT_EYE, {
+        color: '#9068c6ff',
+        lineWidth: 2
+      });
+    });
+  }
 
-            // Visual feedback for eyes
-            drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#9068c6ff', lineWidth: 2 });
-            drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#9068c6ff', lineWidth: 2 });
-        }
+  ctx.restore();
+}
+
+// core blink → morse logic
+function handleBlink(earValue) {
+  const now = Date.now();
+
+  if (earValue < EAR_LIMIT) {
+    if (!blinkingNow) {
+      blinkingNow = true;
+      blinkStartedAt = now;
+
+      statusEl.textContent = 'Blinking...';
+      statusEl.classList.add('active');
+
+      // cancel pending timers since user is mid-input
+      clearTimeout(charTimeout);
+      clearTimeout(wordTimeout);
     }
-    canvasCtx.restore();
-}
+  } else {
+    if (blinkingNow) {
+      blinkingNow = false;
 
-function handleBlinkLogic(ear) {
-    const now = Date.now();
+      statusEl.textContent = 'Paused.';
+      statusEl.classList.remove('active');
 
-    if (ear < EAR_THRESHOLD) {
-        if (!isBlinking) {
-            isBlinking = true;
-            blinkStartTime = now;
-            statusIndicator.textContent = "Blinking...";
-            statusIndicator.classList.add('active');
+      const blinkDuration = now - blinkStartedAt;
+      let symbol;
 
-            // Clear timers when user starts blinking
-            clearTimeout(charTimer);
-            clearTimeout(wordTimer);
-        }
-    } else {
-        if (isBlinking) {
-            isBlinking = false;
-            statusIndicator.textContent = "Paused.";
-            statusIndicator.classList.remove('active');
+      // quick blink = dot, long blink = dash
+      if (blinkDuration < DOT_TIME) {
+        symbol = '.';
+      } else {
+        symbol = '-';
+      }
 
-            const duration = now - blinkStartTime;
-            let signal = '';
+      morseBuffer += symbol;
+      refreshMorseUI();
 
-            if (duration < DOT_DURATION) {
-                signal = '.';
-            } else {
-                signal = '-';
-            }
+      lastBlinkAt = now;
 
-            currentSequence += signal;
-            updateDisplay();
-            lastBlinkTime = now;
-
-            // Set timers for character and word completion
-            charTimer = setTimeout(finalizeCharacter, CHAR_PAUSE);
-            wordTimer = setTimeout(addSpace, WORD_PAUSE);
-        }
+      // schedule character + word handling
+      charTimeout = setTimeout(commitCharacter, CHAR_GAP);
+      wordTimeout = setTimeout(insertSpace, WORD_GAP);
     }
+  }
 }
 
-function addSpace() {
-    translatedTextDisplay.textContent += ' ';
-    updateDisplay();
+// adds space between words
+function insertSpace() {
+  outputTextEl.textContent += ' ';
+  refreshMorseUI();
 }
 
-function finalizeCharacter() {
-    if (currentSequence) {
-        const char = morseCode[currentSequence];
-        if (char) {
-            translatedTextDisplay.textContent += char;
-        } else {
-            translatedTextDisplay.textContent += '?'; // Unknown sequence
-        }
-        currentSequence = '';
-        updateDisplay();
-    }
+// translate current morse buffer into a character
+function commitCharacter() {
+  if (!morseBuffer) return;
+
+  const translated = morseMap[morseBuffer];
+  if (translated) {
+    outputTextEl.textContent += translated;
+  } else {
+    // unknown pattern
+    outputTextEl.textContent += '?';
+  }
+
+  morseBuffer = '';
+  refreshMorseUI();
 }
 
-function updateDisplay() {
-    currentMorseDisplay.textContent = currentSequence;
+function refreshMorseUI() {
+  morseLiveEl.textContent = morseBuffer;
 }
 
-resetBtn.addEventListener('click', () => {
-    currentSequence = '';
-    translatedTextDisplay.textContent = '';
-    updateDisplay();
+// reset everything
+resetButton.addEventListener('click', () => {
+  morseBuffer = '';
+  outputTextEl.textContent = '';
+  refreshMorseUI();
 });
 
+// ---- MediaPipe setup ----
+// could probably move this into its own file later
+
 const faceMesh = new FaceMesh({
-    locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-    }
+  locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
 });
 
 faceMesh.setOptions({
-    maxNumFaces: 1,
-    refineLandmarks: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
+  maxNumFaces: 1,
+  refineLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
 });
 
 faceMesh.onResults(onResults);
 
-const camera = new Camera(videoElement, {
-    onFrame: async () => {
-        await faceMesh.send({ image: videoElement });
-    },
-    width: 640,
-    height: 480
+const camera = new Camera(videoEl, {
+  onFrame: async () => {
+    await faceMesh.send({ image: videoEl });
+  },
+  width: 640,
+  height: 480
 });
 
+// start camera immediately
 camera.start();
